@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RPC-Чат</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-12">
+                <h1 class="text-center">Чат</h1>
+                <div id="chat"></div>
+                <input class="form-control" type="text" id="message">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const KEY_ENTER = 13;
+
+        const socket = new WebSocket('ws://localhost:8080');
+        const chat = document.getElementById('chat');
+        const input = document.getElementById('message');
+
+        input.focus();
+
+        function addLine(text, color = 'black') {
+            const line = document.createElement('div');
+            line.innerHTML = `<p>${text}</p>`;
+            line.style.color = color;
+            chat.appendChild(line);
+        }
+
+        socket.onopen(() => {
+           addLine('Соединение установлено!', 'green');
+        });
+
+        socket.onclose(() => {
+           addLine('Соединение потеряно!', 'red');
+        });
+
+        socket.onmessage(event => {
+           addLine(event.data);
+        });
+
+        input.addEventListener('keydown', event => {
+            if (event.keyCode === KEY_ENTER) {
+                const message = input.value;
+                input.value = '';
+                addLine(message);
+                socket.send(message);
+            }
+        });
+    </script>
+</body>
+</html>
