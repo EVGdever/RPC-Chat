@@ -1,0 +1,12 @@
+{
+  "name": "rpc-chat",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "server": "node server.js"
+  },
+  "keywords": [],
+  "author": "EvgDever <evgdever@gmail.com>",
+  "license": "ISC"
+}
