@@ -4,9 +4,12 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "server": "node server.js"
+    "server": "nodemon server.js"
   },
   "keywords": [],
   "author": "EvgDever <evgdever@gmail.com>",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "websocket": "^1.0.31"
+  }
 }
