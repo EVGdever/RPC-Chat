@@ -5,61 +5,176 @@
     <title>RPC-Чат</title>
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css"
           integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+    <style>
+        .message-input {
+            visibility: hidden;
+        }
+        .message-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px;
+        }
+        .card {
+            background-color: lightgray;
+        }
+        .user {
+            color: blue;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
 <div class="container">
     <div class="row">
         <div class="col-lg-12">
             <h1 class="text-center">Чат</h1>
-            <div id="chat"></div>
-            <input class="form-control" type="text" id="message">
+            <div class="card">
+                <ul class="list-group list-group-flush" id="chat">
+                </ul>
+            </div>
+            <input class="form-control" type="text" id="nickname" placeholder="Введите ваш nickname">
+            <input class="form-control message-input" type="text" id="message">
         </div>
     </div>
 </div>
-
-</body>
 <script>
-    const KEY_ENTER = 13;
-
-    let tryConnection;
     const chat = document.getElementById('chat');
+    const nickInput = document.getElementById('nickname');
     const input = document.getElementById('message');
-    input.focus();
-    connect();
+    const KEY_ENTER = 13;
+    let tryConnection;
+    let secretKey = {};
+    let appId;
+    let nickname;
+    let socket;
 
-    function addLine(text, color = 'black') {
-        const line = document.createElement('div');
-        line.innerHTML = `<p>${text}</p>`;
-        line.style.color = color;
-        chat.appendChild(line);
-    }
+    nickInput.focus();
+
+    nickInput.addEventListener('keydown', key => {
+        if (key.keyCode === KEY_ENTER && nickInput.value.trim() !== '') {
+            nickname = nickInput.value;
+            nickInput.style.visibility = 'hidden';
+            input.style.visibility = 'visible';
+            connect();
+        }
+    });
 
     function connect() {
-        const socket = new WebSocket('ws://localhost:8080');
+        socket = new WebSocket('ws://localhost:8080');
+        appId = Math.floor(Math.random() * Math.floor(10000000));
 
         socket.onopen = () => {
             clearInterval(tryConnection);
             window.socket = socket;
+            secretKey.firstNumber = Math.floor(Math.random() * Math.floor(10000));
+            sendRequest(socket, "firstNumber", 1, {
+                "firstNumber": secretKey.firstNumber,
+                appId
+            });
             addLine('Соединение установлено!', 'green');
         };
 
         socket.onclose = () => {
+            socket = null;
+            secretKey = {};
             tryConnection = setInterval(connect, 1000);
             addLine('Соединение потеряно!', 'red');
         };
 
         socket.onmessage = event => {
-            addLine(event.data);
+            const data = getDataFromRequest(event.data);
+            switch (data.method) {
+                case 'controlServer':
+                    secretKey.sumNumber = Math.floor(Math.random() * Math.floor(10000));
+                    sendRequest(socket, "controlClient", 2, {
+                        controlClient: (secretKey.sumNumber + secretKey.firstNumber) % 256,
+                        appId
+                    });
+                    secretKey = (secretKey.sumNumber + data.params.controlServer) % 256;
+                    console.log(appId, secretKey);
+                    break;
+                case 'message':
+                    const {time, nickname, message} = data.params;
+                    addMessage(msToTime(time), nickname, encryptedToString(message, secretKey));
+                    break;
+                default:
+                    console.log('Не правильный ответ сервера!');
+            }
         };
 
         input.addEventListener('keydown', event => {
-            if (event.keyCode === KEY_ENTER) {
+            if (event.keyCode === KEY_ENTER && input.value.trim() !== '') {
                 const message = input.value;
                 input.value = '';
                 addLine(message);
-                socket.send(message);
+                sendRequest(socket, "message", 10, {
+                    "message": stringToEncrypted(message, secretKey),
+                    "nickname": nickname,
+                    "time": new Date().getTime(),
+                    appId
+                });
             }
         });
     }
+
+    function addLine(text, color = 'black') {
+        const line = document.createElement('li');
+        line.classList.add('message-row','list-group-item');
+        line.innerHTML = `<span style="text-align: right; font-weight: bold">${text}</span>`;
+        line.style.color = color;
+        chat.appendChild(line);
+    }
+
+    function addMessage(time, nickname, message) {
+        const line = document.createElement('li');
+        line.classList.add('message-row','list-group-item');
+        line.innerHTML = `
+            <div>
+                <span class="time">${time}</span>
+                <span class="user">${nickname}</span>
+            </div>
+            <span class="message">${message}</span>
+        `;
+        chat.appendChild(line);
+    }
+
+    function msToTime(ms) {
+        const date = new Date(ms);
+        const hours = date.getHours().toLocaleString().length === 1 ? '0' + date.getHours() : date.getHours();
+        const minutes = date.getMinutes().toLocaleString().length === 1 ? '0' + date.getMinutes() : date.getMinutes();
+        const seconds = date.getSeconds().toLocaleString().length === 1 ? '0' + date.getSeconds() : date.getSeconds();
+        return `${hours}:${minutes}:${seconds}`;
+    }
+
+    function sendRequest(socket, method, id, data) {
+        const rpcRequest = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": {
+                ...data
+            },
+            "id": id
+        };
+        socket.send(JSON.stringify(rpcRequest));
+    }
+
+    function getDataFromRequest(requestStr) {
+        return JSON.parse(requestStr);
+    }
+
+    function stringToEncrypted(str, key) {
+        const strArray = str.split('');
+        return strArray
+                .map(value => value.charCodeAt(0) * key)
+                .join('-');
+    }
+
+    function encryptedToString(encrypted, key) {
+        return encrypted
+                .split('-')
+                .map(value => String.fromCharCode(value / key))
+                .join('')
+    }
 </script>
+</body>
 </html>
